@@ -61,14 +61,24 @@ class Instruction(object):
 def print_instuctions(num_vars, instructions):
     for i in range(instructions.size):
         instructions[i].print_instruction(i)
+        
+def eval_fitness(sheet, instructions):
+    results = np.empty([instructions.size, 1]) # No need to reset becausevalues will always freshly set on each row in a descending manner
+    for r in range(sheet.max_row - 2):
+        i = r + 3 # Remove the headers
+        y_true = sheet.cell(row = r + 3, column = 1).value
+        
+        # Get predicted y value
+        for i in range(instructions.size)
+        
 
 def main():
     # Initialize
     wb = op.load_workbook("gen_data_for_testing.xlsx")
-    sheet = wb.get_sheet_by_name('Exp2')
+    sheet = wb.get_sheet_by_name('Exp1')
     num_vars = sheet.max_column - 1
+    # Copying over x and y saves time from constant reads of excel file? TODO: Check on this
     
-    results = np.empty([0, 1])
     instructions = np.empty([0, 1])
 
     for i in range(num_vars):
@@ -76,10 +86,12 @@ def main():
     
     for i in range(INITIAL_INSTRUCTIONS):
         instructions = np.append(instructions, Instruction(i + num_vars, False))
-        
+       
+    # DEBUG 
     print_instuctions(num_vars, instructions)
-
+        
     # Evaluate fitness (RMSE)
+    eval_fitness(sheet, instructions)
 
     """ Loop """
     # Mutate
