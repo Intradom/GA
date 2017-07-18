@@ -11,9 +11,10 @@ A = misc.imread(pic_name, flatten=True)
 A = misc.imresize(A, (N, N))
 
 A1 = np.fft.fftshift(np.fft.fft2(A))
-I1= abs(A1)
+I1 = abs(A1)
+print(I1)
 
-D2 = np.fft.ifft2(np.fft.fftshift(A1))
+D2 = np.fft.ifft2(np.fft.fftshift(np.sqrt(I1)))
 
 plt.figure(1)
 plt.subplot(2, 2, 1)
