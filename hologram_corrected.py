@@ -11,10 +11,10 @@ A = misc.imread(pic_name, flatten=True)
 A = misc.imresize(A, (N, N))
 
 A1 = np.fft.fftshift(np.fft.fft2(A))
-I1 = abs(A1)
+I1 = A1.real
 print(I1)
 
-D2 = np.fft.ifft2(np.fft.fftshift(np.sqrt(I1)))
+D2 = np.fft.ifft2(np.fft.fftshift(I1))
 
 plt.figure(1)
 plt.subplot(2, 2, 1)
@@ -23,7 +23,7 @@ plt.title('Original')
 plt.imshow(A, extent=[0, 1, 0, 1], cmap = 'gray')
 plt.subplot(2, 2, 2)
 plt.axis('off')
-plt.title('FFT')
+plt.title('FFT ("I1")')
 plt.imshow(I1, extent=[0, 1, 0, 1], cmap = 'gray')
 plt.subplot(2, 2, 3)
 plt.axis('off')
