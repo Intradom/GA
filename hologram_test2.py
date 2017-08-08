@@ -14,7 +14,7 @@ if 0:
 N = 256
 
 if 1:
-  pic_name = "elephant.jpg"
+  pic_name = "circle.jpg"
   A = misc.imread(pic_name, flatten=True)
   A = misc.imresize(A, (N, N))
 
@@ -32,7 +32,7 @@ FA = fft2(AA)
 DA = ifft2( FA.real )
 
 def lg(x):
-  return np.sign(x) * np.log(x)
+  return np.sign(x) * x #np.log(x)
 
 def limg(a):
   return plt.imshow( lg(a), interpolation="nearest", cmap="gray")
@@ -44,7 +44,12 @@ plt.subplot(122); plt.imshow(DA[:N,:N].real)
 plt.figure(1)
 plt.subplot(121); limg(fftshift(FA.real))
 plt.subplot(122); limg(fftshift(FA.imag))
+
+plt.figure(3) ; limg(fftshift(FA.real))
+print(FA.real)
+plt.savefig("test.jpg", dpi = 1000)
 plt.show()
+
 """
 raise "enough"
 
