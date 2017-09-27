@@ -17,6 +17,7 @@ MAX_INTENSITY = 255
 END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better
 MAX_SHAPE_SIZE = 50
 ADDITIONS_BEFORE_EVAL = 10
+GENS_BEFORE_OUTPUT = 100
 
 def load_templates(templates_dir, templates):
     count = 0
@@ -65,7 +66,7 @@ def add_hologram(holo_array, image_side_len, num_template_images, origin):
     holo_vals[1] = np.random.randint(MAX_SHAPE_SIZE, image_side_len - MAX_SHAPE_SIZE)
     holo_vals[2] = np.random.randint(MAX_SHAPE_SIZE, image_side_len - MAX_SHAPE_SIZE)
     holo_vals[3] = np.random.randint(1, MAX_SHAPE_SIZE) # Purposely allow for zero
-    holo_vals[4] = 1 # Use as a mask // np.random.randint(-MAX_INTENSITY, MAX_INTENSITY + 1) # Max intensity is 255, random value from -255 to 255
+    holo_vals[4] = np.random.random() * 2 - 1 # Use as a pos mask or neg partial mask // np.random.randint(-MAX_INTENSITY, MAX_INTENSITY + 1) # Max intensity is 255, random value from -255 to 255
     holo_vals[5] = np.random.randint(num_template_images)
 
     if (origin):
@@ -74,7 +75,7 @@ def add_hologram(holo_array, image_side_len, num_template_images, origin):
     
     holo_array.append(holo_vals)
 
-def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness):
+def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness, new_fit_counter):
     cumulative_hologram = np.zeros([image_side_len, image_side_len])
     for i in range(len(holo_array)):
         current_holo_vals = holo_array[i]
@@ -100,23 +101,28 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
     # plt.imshow(np.fft.fftshift(cumulative_hologram), cmap = 'gray', vmin = -255, vmax = 255) # Set vmin and vmax to force display not to automatically pick intensity range
     # plt.show()
 
-    holo_revert = np.fft.fftshift(np.fft.ifft2(cumulative_hologram)[:image_side_len][:image_side_len].real)
+    holo_revert = np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(cumulative_hologram))[:image_side_len][:image_side_len].real)
     
     # Evaluate fitness of current cumulative hologram
     fit = fitness(original_image, holo_revert, image_side_len)
     
     if (fit < best_fitness):
         best_fitness = fit
-        print("New best fitness: ", fit)
-        plt.figure(1)
-        plt.imshow(cumulative_hologram, cmap = 'gray')
-        plt.figure(2)
-        plt.imshow(holo_revert, cmap = 'gray')
-        plt.show()
+        print("New best fitness: %.5f -- Gen %d" % (fit, new_fit_counter + 1))
+        # Don't output so many times
+        if ((new_fit_counter + 1) % GENS_BEFORE_OUTPUT == 0 or new_fit_counter == 0):
+            plt.figure(1)
+            plt.imshow(cumulative_hologram, cmap = 'gray')
+            plt.title("Hologram")
+            plt.figure(2)
+            plt.imshow(holo_revert, cmap = 'gray')
+            plt.title("Reverted")
+            plt.show()
+        new_fit_counter += 1
     else:
-        holo_array = holo_array[:len(holo_array) - ADDITIONS_BEFORE_EVAL] # Remove the recently added-in hologram images
+        holo_array = holo_array[:(len(holo_array) - ADDITIONS_BEFORE_EVAL)] # Remove the recently added-in hologram images
             
-    return best_fitness
+    return best_fitness, new_fit_counter, holo_array
 
 def main():
     # Load templates
@@ -136,19 +142,17 @@ def main():
     holo_array = []
 
     best_fitness = sys.float_info.max # Lower fitness is better, initialize high
-    iter_counter = 0
     # Loop until fitness eval is within error threshold
+    new_fit_counter = 0
     while (best_fitness > END_THRESHOLD):    
         for i in range(ADDITIONS_BEFORE_EVAL):
             if (i == 0):
                 add_hologram(holo_array, image_side_len, NUM_TEMPLATES, True) # holo_array is modified in the function
             else:
-                add_hologram(holo_array, image_side_len, NUM_TEMPLATES, False) # holo_array is modified in the function
-                
-        best_fitness = eval_fit(OG_image, templates, holo_array, image_side_len, best_fitness)
+                add_hologram(holo_array, image_side_len, NUM_TEMPLATES, False) # holo_array is modified in the function                
         
-        iter_counter += 1
-    
+        best_fitness, new_fit_counter, holo_array = eval_fit(OG_image, templates, holo_array, image_side_len, best_fitness, new_fit_counter)
+            
     # Display and save final hologram and its corresponding reconnstructed image
 
 if __name__ == "__main__":
