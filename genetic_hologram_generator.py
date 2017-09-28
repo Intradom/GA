@@ -4,6 +4,7 @@
 
 import os
 import sys
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import skimage.draw as skdraw
@@ -17,7 +18,8 @@ MAX_INTENSITY = 255
 END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better
 MAX_SHAPE_SIZE = 50
 ADDITIONS_BEFORE_EVAL = 10
-GENS_BEFORE_OUTPUT = 100
+SUCCESSFUL_GENS_BEFORE_OUTPUT = 25
+MUTATION_CHANCE = 0.2 # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers
 
 def load_templates(templates_dir, templates):
     count = 0
@@ -106,11 +108,12 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
     # Evaluate fitness of current cumulative hologram
     fit = fitness(original_image, holo_revert, image_side_len)
     
+    best_fit = False
     if (fit < best_fitness):
         best_fitness = fit
         print("New best fitness: %.5f -- Gen %d" % (fit, new_fit_counter + 1))
         # Don't output so many times
-        if ((new_fit_counter + 1) % GENS_BEFORE_OUTPUT == 0 or new_fit_counter == 0):
+        if ((new_fit_counter + 1) % SUCCESSFUL_GENS_BEFORE_OUTPUT == 0 or new_fit_counter == 0):
             plt.figure(1)
             plt.imshow(cumulative_hologram, cmap = 'gray')
             plt.title("Hologram")
@@ -119,10 +122,10 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
             plt.title("Reverted")
             plt.show()
         new_fit_counter += 1
-    else:
-        holo_array = holo_array[:(len(holo_array) - ADDITIONS_BEFORE_EVAL)] # Remove the recently added-in hologram images
-            
-    return best_fitness, new_fit_counter, holo_array
+        best_fit = True
+        
+    # return best_fitness, new_fit_counter, holo_array[:(len(holo_array) - ADDITIONS_BEFORE_EVAL)] # Remove the recently added-in hologram images
+    return best_fitness, new_fit_counter, best_fit
 
 def main():
     # Load templates
@@ -144,15 +147,24 @@ def main():
     best_fitness = sys.float_info.max # Lower fitness is better, initialize high
     # Loop until fitness eval is within error threshold
     new_fit_counter = 0
-    while (best_fitness > END_THRESHOLD):    
+    while (best_fitness > END_THRESHOLD):  
+        tmp_holo_array = copy.deepcopy(holo_array)
         for i in range(ADDITIONS_BEFORE_EVAL):
+            r = np.random.random() # Generates a random value between 0 and 1
+            if (r < MUTATION_CHANCE and len(tmp_holo_array) > 0): # Mutate, remove hologram layer because layers are additive
+                r_int = np.random.randint(len(tmp_holo_array))
+                del tmp_holo_array[r_int]
+            # Augment  
             if (i == 0):
-                add_hologram(holo_array, image_side_len, NUM_TEMPLATES, True) # holo_array is modified in the function
+                add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, True) # tmp_holo_array is modified in the function, includes point in origin
             else:
-                add_hologram(holo_array, image_side_len, NUM_TEMPLATES, False) # holo_array is modified in the function                
+                add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, False) # tmp_holo_array is modified in the function             
         
-        best_fitness, new_fit_counter, holo_array = eval_fit(OG_image, templates, holo_array, image_side_len, best_fitness, new_fit_counter)
-            
+        best_fitness, new_fit_counter, best_fit = eval_fit(OG_image, templates, tmp_holo_array, image_side_len, best_fitness, new_fit_counter)
+        
+        if (best_fit):
+            holo_array = tmp_holo_array
+        
     # Display and save final hologram and its corresponding reconnstructed image
 
 if __name__ == "__main__":
