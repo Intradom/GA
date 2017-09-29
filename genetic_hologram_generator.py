@@ -15,10 +15,11 @@ from scipy import misc
 MAX_INTENSITY = 255
 
 # Parameters
+OG_IMAGE_DIMMING_FACTOR = 10000 # So reconstructed values can come close to OG image's values, otherwise OG image too bright for iFFT to match quickly. Target value = 255 / OG_IMAGE_DIMMING_FACTOR
 END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better
-MAX_SHAPE_SIZE = 50
+MAX_SHAPE_SIZE = 50 # [Dimming at 10000, Mutation at 0.2, circle.jpg] MAX_SHAPE_SIZE = 5: asymptoted around 3.81915 at 200 S_gens; MAX_SHAPE_SIZE = 10: asymptoted around 3.71 at 256 S_gens;
 ADDITIONS_BEFORE_EVAL = 10
-SUCCESSFUL_GENS_BEFORE_OUTPUT = 25
+SUCCESSFUL_GENS_BEFORE_OUTPUT = 50
 MUTATION_CHANCE = 0.2 # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers
 
 def load_templates(templates_dir, templates):
@@ -43,7 +44,10 @@ def fitness(original, current, image_side_len):
     #t_o = rgb2gray(original)
     #t_c = rgb2gray(current)
     #t = t_o - t_c
-    
+    #np.set_printoptions(threshold=np.nan) # Set print to infinite values
+    #np.savetxt('original_image.txt', original)
+    #np.savetxt('current_image.txt', current)
+    #print(np.amax(current))
     t = original - current
     return np.linalg.norm(t) # Test out different norm functions
 
@@ -111,16 +115,18 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
     best_fit = False
     if (fit < best_fitness):
         best_fitness = fit
-        print("New best fitness: %.5f -- Gen %d" % (fit, new_fit_counter + 1))
+        print("New best fitness: %.5f -- S_gen %d" % (fit, new_fit_counter + 1))
         # Don't output so many times
         if ((new_fit_counter + 1) % SUCCESSFUL_GENS_BEFORE_OUTPUT == 0 or new_fit_counter == 0):
-            plt.figure(1)
+            #plt.figure(1)
             plt.imshow(cumulative_hologram, cmap = 'gray')
             plt.title("Hologram")
-            plt.figure(2)
+            plt.savefig("Outputs/S_gen_" + str(new_fit_counter + 1) + "_holo.png")
+            #plt.figure(2)
             plt.imshow(holo_revert, cmap = 'gray')
-            plt.title("Reverted")
-            plt.show()
+            plt.title("Reverted" + ", fit: " + str(fit))
+            plt.savefig("Outputs/S_gen_" + str(new_fit_counter + 1) + "_revert.png")
+            #plt.show()
         new_fit_counter += 1
         best_fit = True
         
@@ -137,6 +143,7 @@ def main():
     # Load target image
     pic_path = str(sys.argv[2])
     OG_image = misc.imread(pic_path, flatten=True)
+    OG_image /= OG_IMAGE_DIMMING_FACTOR # Dimming so GA can reach optimal brightness faster
     plt.imshow(OG_image, cmap = 'gray')
     plt.show()
     image_side_len = OG_image.shape[0] # Shape has to be same size as template shape
