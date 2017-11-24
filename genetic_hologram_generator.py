@@ -21,11 +21,11 @@ END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better. IGNORE 
 END_SGENS = 200
 ADDITIONS_BEFORE_EVAL = 10
 SUCCESSFUL_GENS_BEFORE_OUTPUT = 50
+NUM_LINES = 2 # How many parallel holograms to evolve. More than 1 enables cross-breeding.
 
 # Parameters to loop through
 MAX_SHAPE_SIZE = [5, 10, 25, 50]
 MUTATION_CHANCE = [0.05] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
-
 
 def load_templates(templates_dir, templates):
     count = 0
@@ -86,7 +86,7 @@ def add_hologram(holo_array, image_side_len, num_template_images, origin, s):
     
     holo_array.append(holo_vals)
 
-def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness, new_fit_counter, start_time, m, s):
+def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness, new_fit_counter, start_time, m, s, lin_num):
     cumulative_hologram = np.zeros([image_side_len, image_side_len])
     for i in range(len(holo_array)):
         current_holo_vals = holo_array[i]
@@ -120,7 +120,7 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
     best_fit = False
     if (fit < best_fitness):
         best_fitness = fit
-        print("New best fitness: %.5f -- S_gen %d" % (fit, new_fit_counter + 1))
+        print("Line " + str(lin_num) + " new best fitness: %.5f -- S_gen %d" % (fit, new_fit_counter + 1))
         # Don't output so many times
         if ((new_fit_counter + 1) % SUCCESSFUL_GENS_BEFORE_OUTPUT == 0 or new_fit_counter == 0):
             # Make sure directory exists
@@ -130,14 +130,14 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
         
             #plt.figure(1)
             plt.imshow(cumulative_hologram, cmap = 'gray')
-            plt.title("Hologram")
-            plt.savefig(target_dir + "S_gen_" + str(new_fit_counter + 1) + "_holo.png")
+            plt.title("Hologram Line " + str(lin_num))
+            plt.savefig(target_dir + "S_gen_" + str(new_fit_counter + 1) + "_holo" + "_Line" + str(lin_num) + ".png")
             #plt.figure(2)
             et_h, rem = divmod(int(time.time() - start_time), 3600)
             et_m, et_s = divmod(rem, 60)
             plt.imshow(holo_revert, cmap = 'gray')
-            plt.title("Reverted - fit: " + "{0:.5f}".format(fit) + ", elapsed time: " + str(et_h) + "h " + str(et_m) + "m " + str(et_s) + "s")
-            plt.savefig(target_dir + "S_gen_" + str(new_fit_counter + 1) + "_revert.png")
+            plt.title("Reverted Line " + str(lin_num) + "- fit: " + "{0:.5f}".format(fit) + ", elapsed time: " + str(et_h) + "h " + str(et_m) + "m " + str(et_s) + "s")
+            plt.savefig(target_dir + "S_gen_" + str(new_fit_counter + 1) + "_revert" + "_Line" + str(lin_num) + ".png")
             #plt.show()
         new_fit_counter += 1
         best_fit = True
@@ -167,33 +167,46 @@ def main():
         for s in range(len(MAX_SHAPE_SIZE)):
             print("Starting run of Mutate: " + str(MUTATION_CHANCE[m]) + " and Max shape size: " + str(MAX_SHAPE_SIZE[s]))
             # Create Hologram array to store individual shapes
-            holo_array = []
-
-            # Get initial times
+            holo_arrays = []
+            lines_completed = 0
+            
+            # Get initial time
             start_time = time.time()
             
-            best_fitness = sys.float_info.max # Lower fitness is better, initialize high
+            best_fitness = []
+            line_array = []
+            line_finished = []
+            new_fit_counter = []
+            for i in range(NUM_LINES):
+                holo_arrays.append(line_array)
+                best_fitness.append(sys.float_info.max) # Lower fitness is better, initialize high
+                line_finished.append(False)
+                new_fit_counter.append(0)
+                
             # Loop until fitness eval is within error threshold
-            new_fit_counter = 0
-            while (best_fitness > END_THRESHOLD and new_fit_counter < END_SGENS):  
-                tmp_holo_array = copy.deepcopy(holo_array)
-                for i in range(ADDITIONS_BEFORE_EVAL):
-                    r = np.random.random() # Generates a random value between 0 and 1
-                    if (r < m and len(tmp_holo_array) > 0): # Mutate, remove hologram layer because layers are additive
-                        r_int = np.random.randint(len(tmp_holo_array))
-                        del tmp_holo_array[r_int]
-                    # Augment  
-                    if (i == 0):
-                        add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, True, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function, includes point in origin
-                    else:
-                        add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, False, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function             
-                
-                best_fitness, new_fit_counter, best_fit = eval_fit(OG_image, templates, tmp_holo_array, image_side_len, best_fitness, new_fit_counter, start_time, MUTATION_CHANCE[m], MAX_SHAPE_SIZE[s])
-                
-                if (best_fit):
-                    holo_array = tmp_holo_array
-            
-            print(len(holo_array))
-            
+            while (lines_completed < NUM_LINES):
+                for l in range(NUM_LINES):
+                    if (not line_finished[l]):
+                        if (best_fitness[l] > END_THRESHOLD and new_fit_counter[l] < END_SGENS):
+                            tmp_holo_array = copy.deepcopy(holo_arrays[l])
+                            for i in range(ADDITIONS_BEFORE_EVAL):
+                                r = np.random.random() # Generates a random value between 0 and 1
+                                if (r < m and len(tmp_holo_array) > 0): # Mutate, remove hologram layer because layers are additive
+                                    r_int = np.random.randint(len(tmp_holo_array))
+                                    del tmp_holo_array[r_int]
+                                # Augment  
+                                if (i == 0):
+                                    add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, True, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function, includes point in origin
+                                else:
+                                    add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, False, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function             
+                            
+                            best_fitness[l], new_fit_counter[l], best_fit = eval_fit(OG_image, templates, tmp_holo_array, image_side_len, best_fitness[l], new_fit_counter[l], start_time, MUTATION_CHANCE[m], MAX_SHAPE_SIZE[s], l)
+                            
+                            if (best_fit):
+                                holo_arrays[l] = tmp_holo_array
+                        else:
+                            line_finished[l] = True
+                            lines_completed += 1
+                        
 if __name__ == "__main__":
     main()
