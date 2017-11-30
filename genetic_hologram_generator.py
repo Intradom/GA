@@ -21,11 +21,14 @@ END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better. IGNORE 
 END_SGENS = 200
 ADDITIONS_BEFORE_EVAL = 10
 SUCCESSFUL_GENS_BEFORE_OUTPUT = 50
-NUM_LINES = 2 # How many parallel holograms to evolve. More than 1 enables cross-breeding.
+NUM_INITIAL_LINES = 2 # How many initial parallel holograms to evolve. More than 1 enables cross-breeding.
+MAX_LINES = 5
+CROSSOVER_RATE = 50 # Number of S_gens before crossover
+CROSSOVER_SINGLE_POINT_THRESH = 0.5 # Value between 0 and 1 that determines where the code is swapped at. Higher values means more of original chromosome is preserved
 
-# Parameters to loop through
-MAX_SHAPE_SIZE = [5, 10, 25, 50]
-MUTATION_CHANCE = [0.05] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
+# Parameters to loop through, add elements to these arrays to loop through them
+MAX_SHAPE_SIZE = [10]
+MUTATION_CHANCE = [0.1] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
 
 def load_templates(templates_dir, templates):
     count = 0
@@ -86,7 +89,31 @@ def add_hologram(holo_array, image_side_len, num_template_images, origin, s):
     
     holo_array.append(holo_vals)
 
-def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness, new_fit_counter, start_time, m, s, lin_num):
+""" Crossover Functions """
+def crossover_helper_targ_random(current_line, total_lines):
+    # Select another line besides current one
+    r_array = np.asarray(range(total_lines))
+    np.random.shuffle(r_array)
+    targ_line = r_array[0]
+    if (targ_line == current_line):
+        targ_line = r_array[1]
+        
+    return targ_line
+
+def crossover_two_lines_single_point(new_line_array, holo_arrays, current_line, total_lines):
+    targ_line = crossover_helper_targ_random(current_line, total_lines)
+    
+    curr_use_len = int(len(holo_arrays[current_line]) * CROSSOVER_SINGLE_POINT_THRESH)
+    targ_use_len = int(len(holo_arrays[targ_line]) * CROSSOVER_SINGLE_POINT_THRESH)
+    
+    new_line_array = copy.deepcopy(holo_arrays[current_line][:curr_use_len]) # Before thresh
+    new_holo_after_thresh = copy.deepcopy(holo_arrays[targ_line][targ_use_len:]) # After thresh
+    
+    print("Crossed line " + str(current_line) + " with line " + str(targ_line))
+    
+    new_line_array.append(new_holo_after_thresh)
+    
+def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness, current_sgen, start_time, m, s, lin_num):
     cumulative_hologram = np.zeros([image_side_len, image_side_len])
     for i in range(len(holo_array)):
         current_holo_vals = holo_array[i]
@@ -120,9 +147,9 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
     best_fit = False
     if (fit < best_fitness):
         best_fitness = fit
-        print("Line " + str(lin_num) + " new best fitness: %.5f -- S_gen %d" % (fit, new_fit_counter + 1))
+        print("Line " + str(lin_num) + " new best fitness: %.5f -- S_gen %d" % (fit, current_sgen + 1))
         # Don't output so many times
-        if ((new_fit_counter + 1) % SUCCESSFUL_GENS_BEFORE_OUTPUT == 0 or new_fit_counter == 0):
+        if ((current_sgen + 1) % SUCCESSFUL_GENS_BEFORE_OUTPUT == 0 or current_sgen == 0):
             # Make sure directory exists
             target_dir = "Outputs/Current_run/" + "Mutate_" + str(int(m * 100)) + "/Max_shape_" + str(s) + "/"
             if not os.path.isdir(target_dir):
@@ -131,19 +158,19 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
             #plt.figure(1)
             plt.imshow(cumulative_hologram, cmap = 'gray')
             plt.title("Hologram Line " + str(lin_num))
-            plt.savefig(target_dir + "S_gen_" + str(new_fit_counter + 1) + "_holo" + "_Line" + str(lin_num) + ".png")
+            plt.savefig(target_dir + "S_gen_" + str(current_sgen + 1) + "_holo" + "_Line" + str(lin_num) + ".png")
             #plt.figure(2)
             et_h, rem = divmod(int(time.time() - start_time), 3600)
             et_m, et_s = divmod(rem, 60)
             plt.imshow(holo_revert, cmap = 'gray')
             plt.title("Reverted Line " + str(lin_num) + "- fit: " + "{0:.5f}".format(fit) + ", elapsed time: " + str(et_h) + "h " + str(et_m) + "m " + str(et_s) + "s")
-            plt.savefig(target_dir + "S_gen_" + str(new_fit_counter + 1) + "_revert" + "_Line" + str(lin_num) + ".png")
+            plt.savefig(target_dir + "S_gen_" + str(current_sgen + 1) + "_revert" + "_Line" + str(lin_num) + ".png")
             #plt.show()
-        new_fit_counter += 1
+        current_sgen += 1
         best_fit = True
         
-    # return best_fitness, new_fit_counter, holo_array[:(len(holo_array) - ADDITIONS_BEFORE_EVAL)] # Remove the recently added-in hologram images
-    return best_fitness, new_fit_counter, best_fit
+    # return best_fitness, current_sgen, holo_array[:(len(holo_array) - ADDITIONS_BEFORE_EVAL)] # Remove the recently added-in hologram images
+    return best_fitness, current_sgen, best_fit
 
 def main():
     # Load templates
@@ -176,19 +203,36 @@ def main():
             best_fitness = []
             line_array = []
             line_finished = []
-            new_fit_counter = []
-            for i in range(NUM_LINES):
+            current_sgen = []
+            can_cross = []
+            for i in range(NUM_INITIAL_LINES):
                 holo_arrays.append(line_array)
                 best_fitness.append(sys.float_info.max) # Lower fitness is better, initialize high
                 line_finished.append(False)
-                new_fit_counter.append(0)
+                can_cross.append(False)
+                current_sgen.append(0)
+            num_total_lines = NUM_INITIAL_LINES
                 
             # Loop until fitness eval is within error threshold
-            while (lines_completed < NUM_LINES):
-                for l in range(NUM_LINES):
-                    if (not line_finished[l]):
-                        if (best_fitness[l] > END_THRESHOLD and new_fit_counter[l] < END_SGENS):
-                            tmp_holo_array = copy.deepcopy(holo_arrays[l])
+            while (lines_completed < num_total_lines):
+                for line in range(num_total_lines):
+                    if (not line_finished[line]):
+                        if (best_fitness[line] > END_THRESHOLD and current_sgen[line] < END_SGENS):
+                            if ((current_sgen[line] % CROSSOVER_RATE == 0) and (can_cross[line]) and (num_total_lines < MAX_LINES) and (num_total_lines > 1)):
+                                # Create new line by crossbreeding existing lines_completed
+                                new_line_array = []
+                                
+                                crossover_two_lines_single_point(new_line_array, holo_arrays, line, num_total_lines) # Modifies new_line_array
+                                holo_arrays.append(new_line_array)
+                                best_fitness.append(sys.float_info.max)
+                                line_finished.append(False)
+                                can_cross.append(False)
+                                current_sgen.append(current_sgen[line]) # Keep new line at same S_gen mark so it's not forced into s_gen asymptote too early
+                                num_total_lines += 1
+                                
+                                can_cross[line] = False
+                                
+                            tmp_holo_array = copy.deepcopy(holo_arrays[line])
                             for i in range(ADDITIONS_BEFORE_EVAL):
                                 r = np.random.random() # Generates a random value between 0 and 1
                                 if (r < m and len(tmp_holo_array) > 0): # Mutate, remove hologram layer because layers are additive
@@ -200,12 +244,13 @@ def main():
                                 else:
                                     add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, False, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function             
                             
-                            best_fitness[l], new_fit_counter[l], best_fit = eval_fit(OG_image, templates, tmp_holo_array, image_side_len, best_fitness[l], new_fit_counter[l], start_time, MUTATION_CHANCE[m], MAX_SHAPE_SIZE[s], l)
+                            best_fitness[line], current_sgen[line], best_fit = eval_fit(OG_image, templates, tmp_holo_array, image_side_len, best_fitness[line], current_sgen[line], start_time, MUTATION_CHANCE[m], MAX_SHAPE_SIZE[s], line)
                             
                             if (best_fit):
-                                holo_arrays[l] = tmp_holo_array
+                                holo_arrays[line] = tmp_holo_array
+                                can_cross[line] = True
                         else:
-                            line_finished[l] = True
+                            line_finished[line] = True
                             lines_completed += 1
                         
 if __name__ == "__main__":
