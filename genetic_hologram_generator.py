@@ -12,6 +12,9 @@ import skimage.draw as skdraw
 from PIL import Image
 from scipy import misc
 
+# Template names
+TEMPLATE_NAMES = []
+
 # Image constants
 MAX_INTENSITY = 255
 
@@ -21,8 +24,8 @@ END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better. IGNORE 
 END_SGENS = 200
 ADDITIONS_BEFORE_EVAL = 10
 SUCCESSFUL_GENS_BEFORE_OUTPUT = 50
-NUM_INITIAL_LINES = 2 # How many initial parallel holograms to evolve. More than 1 enables cross-breeding.
-MAX_LINES = 5
+NUM_INITIAL_LINES = 1 # How many initial parallel holograms to evolve. More than 1 enables cross-breeding.
+MAX_LINES = 1
 CROSSOVER_RATE = 50 # Number of S_gens before crossover
 CROSSOVER_SINGLE_POINT_THRESH = 0.5 # Value between 0 and 1 that determines where the code is swapped at. Higher values means more of original chromosome is preserved
 
@@ -31,15 +34,12 @@ MAX_SHAPE_SIZE = [10]
 MUTATION_CHANCE = [0.1] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
 
 def load_templates(templates_dir, templates):
-    count = 0
     for file in os.listdir(templates_dir):
         if file.endswith(".jpg"):
             full_path = os.path.join(templates_dir, file)
+            TEMPLATE_NAMES.append(file)
             template_image = misc.imread(full_path, flatten = True)
             templates.append(template_image)
-            count += 1
-        
-    return count
 
 def rgb2gray(rgb):
     return np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
@@ -148,6 +148,10 @@ def eval_fit(original_image, templates, holo_array, image_side_len, best_fitness
     if (fit < best_fitness):
         best_fitness = fit
         print("Line " + str(lin_num) + " new best fitness: %.5f -- S_gen %d" % (fit, current_sgen + 1))
+        # Print the % of each template type
+        template_vals = np.array(holo_array)[:, 5]
+        for i in range(len(TEMPLATE_NAMES)):
+            print("\t{0:.5f}".format(((template_vals == i).sum() / template_vals.size)) + "\t" + TEMPLATE_NAMES[i])
         # Don't output so many times
         if ((current_sgen + 1) % SUCCESSFUL_GENS_BEFORE_OUTPUT == 0 or current_sgen == 0):
             # Make sure directory exists
@@ -177,7 +181,7 @@ def main():
     print("Loading templates")
     templates_dir = str(sys.argv[1])
     templates = []
-    NUM_TEMPLATES = load_templates(templates_dir, templates)
+    load_templates(templates_dir, templates)
     templates = np.array(templates)
         
     # Load target image
@@ -240,9 +244,9 @@ def main():
                                     del tmp_holo_array[r_int]
                                 # Augment  
                                 if (i == 0):
-                                    add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, True, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function, includes point in origin
+                                    add_hologram(tmp_holo_array, image_side_len, templates.shape[0], True, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function, includes point in origin
                                 else:
-                                    add_hologram(tmp_holo_array, image_side_len, NUM_TEMPLATES, False, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function             
+                                    add_hologram(tmp_holo_array, image_side_len, templates.shape[0], False, MAX_SHAPE_SIZE[s]) # tmp_holo_array is modified in the function             
                             
                             best_fitness[line], current_sgen[line], best_fit = eval_fit(OG_image, templates, tmp_holo_array, image_side_len, best_fitness[line], current_sgen[line], start_time, MUTATION_CHANCE[m], MAX_SHAPE_SIZE[s], line)
                             
