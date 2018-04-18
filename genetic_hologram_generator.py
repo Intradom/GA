@@ -23,7 +23,8 @@ OG_IMAGE_DIMMING_FACTOR = 10000 # So reconstructed values can come close to OG i
 END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better. IGNORE THIS VALUE RIGHT NOW, not properly tuned
 END_GENS = 250
 ADDITIONS_BEFORE_EVAL = 10
-SGENS_BEFORE_OUTPUT = 50
+GENS_BEFORE_PRINT = 50
+SGENS_BEFORE_OUTPUT = 1
 NUM_INITIAL_LINES = 1 # How many initial parallel holograms to evolve. More than 1 enables cross-breeding.
 MAX_LINES = 5 # Should be at least NUM_INITIAL_LINES + 1
 CROSSOVER_RATE = 50 # Number of S_gens before crossover
@@ -33,7 +34,7 @@ FITNESS_WHITE_PIXEL_BIAS = 0.5 # How much to look for white pixels in fitness ca
 
 # Parameters to loop through, add elements to these arrays to loop through them
 MAX_SHAPE_SIZE = [100] # Size of one mask shape
-MUTATION_CHANCE = [0.5] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
+MUTATION_CHANCE = [0.9] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
 
 def load_templates(templates_dir, templates):
     for file in os.listdir(templates_dir):
@@ -58,10 +59,13 @@ def fitness(original, current, image_side_len):
     #np.savetxt('original_image.txt', original)
     #np.savetxt('current_image.txt', current)
     #print(np.amax(current))
-    #t = original - current
-    white_bias = FITNESS_WHITE_PIXEL_BIAS * np.linalg.norm(original * current)
-    black_bias = (1 - FITNESS_WHITE_PIXEL_BIAS) * np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
-    return white_bias + black_bias # Test out different norm functions
+    t = original - current
+    return np.linalg.norm(t)
+
+    # Non Linear
+    #white_bias = FITNESS_WHITE_PIXEL_BIAS * np.linalg.norm(original * current)
+    #black_bias = (1 - FITNESS_WHITE_PIXEL_BIAS) * np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
+    #return white_bias + black_bias # Test out different norm functions
 
 def draw_filled_circle(x, y, r):
     return skdraw.circle(int(x), int(y), int(r))
@@ -220,11 +224,13 @@ def main():
             num_total_lines = NUM_INITIAL_LINES
             generation = 0
             sgen = 0 # Tracks number of improvements
-            
             best_fitness_val = sys.float_info.max
+            
             #best_fitness_diff = sys.float_info.max # Set arbitrary high value
             while (generation < END_GENS):
+                #if (generation % GENS_BEFORE_PRINT == 0):
                 print('Generation: ' + str(generation))
+
                 """ 1. Assess fitness """
                 for line in range(num_total_lines):
                     #if (not line_finished[line]):
@@ -241,13 +247,13 @@ def main():
                 """ 2. Selection for worst """
                 pick_line_worst = 0
                 tmp_worst_fitness = 0
-                for line in range(num_total_lines - 1): # Don't need to consider the new line, don't have fitness for it yet
+                for line in range(num_total_lines):
                     if (fitness[line] > tmp_worst_fitness):
                         pick_line_worst = line
                         tmp_worst_fitness = fitness[line]
 
                 """ 3. Deletion """
-                if (len(holo_arrays) >= MAX_LINES + 1):
+                if (len(holo_arrays) > MAX_LINES):
                     del holo_arrays[pick_line_worst]
                     num_total_lines -= 1
 
