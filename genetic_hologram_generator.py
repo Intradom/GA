@@ -47,7 +47,7 @@ def load_templates(templates_dir, templates):
 def rgb2gray(rgb):
     return np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
     
-def fitness(original, current, image_side_len):
+def fitness(original, current, image_side_len, mask_cost):
     # plt.imshow(current, cmap = 'gray', vmin = -255, vmax = 255) # Set vmin and vmax to force display not to automatically pick intensity range
     # plt.show()
     
@@ -59,13 +59,15 @@ def fitness(original, current, image_side_len):
     #np.savetxt('original_image.txt', original)
     #np.savetxt('current_image.txt', current)
     #print(np.amax(current))
-    t = original - current
-    return np.linalg.norm(t)
+    
+    # Linear
+    #t = original - current
+    #return np.linalg.norm(t) + mask_cost
 
     # Non Linear
-    #white_bias = FITNESS_WHITE_PIXEL_BIAS * np.linalg.norm(original * current)
-    #black_bias = (1 - FITNESS_WHITE_PIXEL_BIAS) * np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
-    #return white_bias + black_bias # Test out different norm functions
+    white_bias = FITNESS_WHITE_PIXEL_BIAS * np.linalg.norm(original * current)
+    black_bias = (1 - FITNESS_WHITE_PIXEL_BIAS) * np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
+    return white_bias + black_bias + mask_cost # Test out different norm functions
 
 def draw_filled_circle(x, y, r):
     return skdraw.circle(int(x), int(y), int(r))
@@ -149,7 +151,7 @@ def eval_fit(original_image, templates, current_line, image_side_len, sgen, curr
     holo_revert = np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(cumulative_hologram))[:image_side_len][:image_side_len].real)
     
     # Evaluate fitness of current cumulative hologram
-    fit = fitness(original_image, holo_revert, image_side_len)
+    fit = fitness(original_image, holo_revert, image_side_len, np.sum(cumulative_hologram))
     print("Line " + str(lin_num) + ": " + str(fit))
     #print(best_fitness)
     if (fit < best_fitness):
