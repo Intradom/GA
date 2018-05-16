@@ -30,7 +30,9 @@ MAX_LINES = 5 # Should be at least NUM_INITIAL_LINES + 1
 CROSSOVER_RATE = 50 # Number of S_gens before crossover
 CROSSOVER_SINGLE_POINT_THRESH = 0.5 # Value between 0 and 1 that determines where the code is swapped at. Higher values means more of original chromosome is preserved
 MIN_FIT_INCREASE = 0.001 # Determines when to stop algorithm
-FITNESS_WHITE_PIXEL_BIAS = 0.5 # How much to look for white pixels in fitness calculation, FITNESS_BLACK_PIXEL_BIAS = (1 - FITNESS_WHITE_PIXEL_BIAS)
+FITNESS_WHITE_PIXEL_BIAS = 100.0 # How much to look for white pixels in fitness calculation, FITNESS_BLACK_PIXEL_BIAS = (1 - FITNESS_WHITE_PIXEL_BIAS)
+FITNESS_BLACK_PIXEL_BIAS = 1 / 200.0
+FITNESS_MASK_BIAS = 1 / 200000.0 # All biases are empiracally tuned, make mask bias smaller than others because it is less important
 
 # Parameters to loop through, add elements to these arrays to loop through them
 MAX_SHAPE_SIZE = [100] # Size of one mask shape
@@ -46,11 +48,11 @@ def load_templates(templates_dir, templates):
 
 def rgb2gray(rgb):
     return np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
-    
+
 def fitness(original, current, image_side_len, mask_cost):
     # plt.imshow(current, cmap = 'gray', vmin = -255, vmax = 255) # Set vmin and vmax to force display not to automatically pick intensity range
     # plt.show()
-    
+
     # Convert to grayscale
     #t_o = rgb2gray(original)
     #t_c = rgb2gray(current)
@@ -65,9 +67,15 @@ def fitness(original, current, image_side_len, mask_cost):
     #return np.linalg.norm(t) + mask_cost
 
     # Non Linear
-    white_bias = FITNESS_WHITE_PIXEL_BIAS * np.linalg.norm(original * current)
-    black_bias = (1 - FITNESS_WHITE_PIXEL_BIAS) * np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
-    return white_bias + black_bias + mask_cost # Test out different norm functions
+    white_bias = np.linalg.norm(original * current)
+    black_bias = np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
+    scaled_white_bias = white_bias * FITNESS_WHITE_PIXEL_BIAS
+    scaled_black_bias = black_bias * FITNESS_BLACK_PIXEL_BIAS
+    scaled_mask_bias = mask_cost * FITNESS_MASK_BIAS
+    print(scaled_white_bias)
+    print(scaled_black_bias)
+    print(scaled_mask_bias)
+    return scaled_white_bias + scaled_black_bias + scaled_mask_bias # Test out different norm functions
 
 def draw_filled_circle(x, y, r):
     return skdraw.circle(int(x), int(y), int(r))
@@ -151,7 +159,7 @@ def eval_fit(original_image, templates, current_line, image_side_len, sgen, curr
     holo_revert = np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(cumulative_hologram))[:image_side_len][:image_side_len].real)
     
     # Evaluate fitness of current cumulative hologram
-    fit = fitness(original_image, holo_revert, image_side_len, np.sum(cumulative_hologram))
+    fit = fitness(original_image, holo_revert, image_side_len, np.sum(np.abs(cumulative_hologram)))
     print("Line " + str(lin_num) + ": " + str(fit))
     #print(best_fitness)
     if (fit < best_fitness):
