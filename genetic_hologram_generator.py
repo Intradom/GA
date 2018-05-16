@@ -1,5 +1,6 @@
 # This program uses a genetic algorithm to generate a hologram that matches an input image
 # To run: python2 <preceding path to file>/genetic_hologram_generator.py <path_to_hologram_templates> <path_to_OG_image_file>, example: python ../genetic_hologram_generator.py ./holo_templates/ ./pre_templates/filled_circle_med.jpg
+# Output files are stored in ./Outputs/Current_run
 # Image shape has to match template shape, JPEG images ONLY
 # Increase parameter "END_GENS" to run have the GA run longer
 # Fitness biases are tentatively tuned. A working version has FITNESS_BLACK_PIXEL_BIAS = FITNESS_WHITE_PIXEL_BIAS = 0.5 and FITNESS_MASK_BIAS = 0
