@@ -28,7 +28,7 @@ MAX_INTENSITY = 255
 
 # Parameters
 OG_IMAGE_DIMMING_FACTOR = 10000 # So reconstructed values can come close to OG image's values, otherwise OG image too bright for iFFT to match quickly. Target value = 255 / OG_IMAGE_DIMMING_FACTOR
-END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better. IGNORE THIS VALUE RIGHT NOW, not properly tuned
+#END_THRESHOLD = 0.0000001 # RMSE cut-off, lower fitness value is better. IGNORE THIS VALUE RIGHT NOW, not properly tuned
 END_GENS = 250 # Increase this to have algorithm run longer
 ADDITIONS_BEFORE_EVAL = 10
 GENS_BEFORE_PRINT = 50
@@ -42,7 +42,7 @@ FITNESS_WHITE_PIXEL_BIAS = 100.0 # How much to look for white pixels in fitness 
 FITNESS_BLACK_PIXEL_BIAS = 1 / 200.0
 FITNESS_MASK_BIAS = 1 / 200000.0 # All biases are empiracally tuned, make mask bias smaller than others because it is less important
 
-# Parameters to loop through, add elements to these arrays to loop through them
+# Parameters to loop through, add elements to these arrays to loop through them, loops through END_GENS of each value here
 MAX_SHAPE_SIZE = [100] # Size of one mask shape
 MUTATION_CHANCE = [0.9] # Value between 0 and 1, 0 means no mutations while 1 means all mutations and no new layers, should be at most 2 decimal precsion value for file directory saving
 
@@ -74,16 +74,16 @@ def fitness(original, current, image_side_len, mask_cost):
     #t = original - current
     #return np.linalg.norm(t) + mask_cost
 
-    # Non Linear
+    # Non Linear TODO: Tune weights better
     white_bias = np.linalg.norm(original * current)
     black_bias = np.linalg.norm(np.abs(original - MAX_INTENSITY) * current)
     scaled_white_bias = white_bias * FITNESS_WHITE_PIXEL_BIAS
     scaled_black_bias = black_bias * FITNESS_BLACK_PIXEL_BIAS
     scaled_mask_bias = mask_cost * FITNESS_MASK_BIAS
-    print(scaled_white_bias)
-    print(scaled_black_bias)
-    print(scaled_mask_bias)
-    return scaled_white_bias + scaled_black_bias + scaled_mask_bias # Test out different norm functions
+    #print(scaled_white_bias) Output these values for manual tunings
+    #print(scaled_black_bias)
+    #print(scaled_mask_bias)
+    return scaled_white_bias + scaled_black_bias + scaled_mask_bias # TODO: Test out different norm functions
 
 def draw_filled_circle(x, y, r):
     return skdraw.circle(int(x), int(y), int(r))
@@ -102,20 +102,21 @@ def add_hologram(holo_array, image_side_len, num_template_images, origin, s):
     holo_vals = np.empty(6)
 
     # Determine which shape to add to canvas, and where to put it/size
-    holo_vals[0] = np.random.randint(4) # 0 to 3
-    holo_vals[1] = np.random.randint(s, image_side_len - s)
-    holo_vals[2] = np.random.randint(s, image_side_len - s)
-    holo_vals[3] = np.random.randint(1, s) # Purposely allow for zero
+    holo_vals[0] = np.random.randint(4) # What kind of shape to add (0: Filled circle, 1: Outlined circle, 2: Filled rectangle, 3: Outlined rectangle)
+    holo_vals[1] = np.random.randint(s, image_side_len - s) # X location of shape mask
+    holo_vals[2] = np.random.randint(s, image_side_len - s) # Y location of shape mask
+    holo_vals[3] = np.random.randint(1, s) # Size of shape mask
     holo_vals[4] = np.random.random() * 2 - 1 # Use as a pos mask or neg partial mask // np.random.randint(-MAX_INTENSITY, MAX_INTENSITY + 1) # Max intensity is 255, random value from -255 to 255
-    holo_vals[5] = np.random.randint(num_template_images)
+    holo_vals[5] = np.random.randint(num_template_images) # Which template image to mask
 
-    if (origin):
+    if (origin): # Having origin make GA job easier, because most of the crucial information is in the origin of the holo templates
         holo_vals[1] = image_side_len / 2
         holo_vals[2] = image_side_len / 2
     
     holo_array.append(holo_vals)
 
 """ Crossover Functions """
+""" Used to select another line besides given one, keeping here in case of future use
 def crossover_helper_targ_random(current_line, total_lines):
     # Select another line besides current one
     r_array = np.asarray(range(total_lines))
@@ -125,10 +126,9 @@ def crossover_helper_targ_random(current_line, total_lines):
         targ_line = r_array[1]
         
     return targ_line
+"""
 
 def crossover_two_lines_single_point(holo_arrays, line_one, line_two):
-    #targ_line = crossover_helper_targ_random(current_line, total_lines)
-    
     curr_use_len = int(len(holo_arrays[line_one]) * CROSSOVER_SINGLE_POINT_THRESH)
     
     new_line_array = copy.deepcopy(holo_arrays[line_one][:curr_use_len]) # Before thresh
@@ -227,40 +227,30 @@ def main():
             
             fitness = []
             line_array = []
-            #line_finished = []
-            #current_sgen = []
-            #can_cross = []
             for i in range(NUM_INITIAL_LINES):
                 holo_arrays.append(line_array)
                 fitness.append(0)
                 # Add starting info
                 for j in range(ADDITIONS_BEFORE_EVAL):
                     add_hologram(holo_arrays[i], image_side_len, templates.shape[0], True, MAX_SHAPE_SIZE[s])
-                #best_fitness.append(sys.float_info.max) # Lower fitness is better, initialize high
-                #line_finished.append(False)
-                #can_cross.append(False)
             num_total_lines = NUM_INITIAL_LINES
             generation = 0
             sgen = 0 # Tracks number of improvements
             best_fitness_val = sys.float_info.max
             
-            #best_fitness_diff = sys.float_info.max # Set arbitrary high value
+			# Change to use END_THRESH if the fitness levels are understood better. More official way of GA termination.
             while (generation < END_GENS):
                 #if (generation % GENS_BEFORE_PRINT == 0):
                 print('Generation: ' + str(generation))
 
                 """ 1. Assess fitness """
                 for line in range(num_total_lines):
-                    #if (not line_finished[line]):
-                    #if (best_fitness[line] > END_THRESHOLD and current_sgen[line] < END_SGENS):
                     new_fit, sgen = eval_fit(OG_image, templates, holo_arrays[line], image_side_len, sgen, generation, start_time, MUTATION_CHANCE[m], MAX_SHAPE_SIZE[s], line, best_fitness_val)
                     
                     if (line >= len(fitness)):
                         fitness.append(new_fit)
                     else:
                         fitness[line] = new_fit
-                    #if (fitness < best_fitness_val):
-                        #fitness[line] = current_fitness
 
                 """ 2. Selection for worst """
                 pick_line_worst = 0
@@ -292,8 +282,6 @@ def main():
                         else:
                             pick_line_best[0] = line
                             tmp_best_fitness[0] = fitness[line]
-                #print(pick_line_best)
-                #best_fitness_diff = pick_line[0] - best_fitness_val
                 if (tmp_best_fitness[1] < best_fitness_val):
                     best_fitness_val = tmp_best_fitness[1] # best_fitness_val should never decrease, because original line should always be kept
 
@@ -315,7 +303,6 @@ def main():
 
                 """ 7. Misc """
                 generation += 1
-
                         
 if __name__ == "__main__":
     main()
